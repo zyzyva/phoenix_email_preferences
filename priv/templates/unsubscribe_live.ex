@@ -1,0 +1,168 @@
+defmodule <%= @web_module %>.UnsubscribeLive do
+  use <%= @web_module %>, :live_view
+
+  alias <%= @app_module %>.EmailPreferences
+
+  @impl true
+  def mount(%{"token" => token}, _session, socket) do
+    case EmailPreferences.verify_unsubscribe_token(token) do
+      {:ok, {user_id, preference_type}} ->
+        {:ok,
+         socket
+         |> assign(:user_id, user_id)
+         |> assign(:preference_type, preference_type)
+         |> assign(:token, token)
+         |> assign(:unsubscribed, false)
+         |> assign(:error, nil)}
+
+      {:error, :expired} ->
+        {:ok,
+         socket
+         |> assign(:user_id, nil)
+         |> assign(:preference_type, nil)
+         |> assign(:token, nil)
+         |> assign(:unsubscribed, false)
+         |> assign(:error, :expired)}
+
+      {:error, :invalid} ->
+        {:ok,
+         socket
+         |> assign(:user_id, nil)
+         |> assign(:preference_type, nil)
+         |> assign(:token, nil)
+         |> assign(:unsubscribed, false)
+         |> assign(:error, :invalid)}
+    end
+  end
+
+  @impl true
+  def handle_event("unsubscribe", _params, socket) do
+    result = EmailPreferences.opt_out(socket.assigns.user_id, socket.assigns.preference_type, %{
+      source: "email_link",
+      ip_address: get_connect_info(socket, :peer_data) |> get_ip_address(),
+      user_agent: get_connect_info(socket, :user_agent)
+    })
+
+    case result do
+      {:ok, _} ->
+        {:noreply, assign(socket, :unsubscribed, true)}
+
+      {:error, _} ->
+        {:noreply, assign(socket, :error, :failed)}
+    end
+  end
+
+  @impl true
+  def render(assigns) do
+    ~H"""
+    <div class="mx-auto max-w-md mt-16">
+      <div class="bg-white shadow sm:rounded-lg">
+        <div class="px-4 py-5 sm:p-6">
+          <%= if @error do %>
+            <div class="text-center">
+              <svg class="mx-auto h-12 w-12 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+
+              <h3 class="mt-4 text-lg font-medium text-zinc-900">
+                <%= if @error == :expired, do: "Link Expired", else: "Invalid Link" %>
+              </h3>
+
+              <p class="mt-2 text-sm text-zinc-600">
+                <%= if @error == :expired do %>
+                  This unsubscribe link has expired. Please use the link from a more recent email, or manage your preferences from your account settings.
+                <% else %>
+                  This unsubscribe link is invalid. Please check that you copied the full link from the email.
+                <% end %>
+              </p>
+
+              <div class="mt-6">
+                <.link
+                  href={~p"/users/log_in"}
+                  class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900"
+                >
+                  Go to Account Settings
+                </.link>
+              </div>
+            </div>
+          <% else %>
+            <%= if @unsubscribed do %>
+              <div class="text-center">
+                <svg class="mx-auto h-12 w-12 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+
+                <h3 class="mt-4 text-lg font-medium text-zinc-900">
+                  You've Been Unsubscribed
+                </h3>
+
+                <p class="mt-2 text-sm text-zinc-600">
+                  You will no longer receive <%= humanize_preference_type(@preference_type) %> from us.
+                </p>
+
+                <div class="mt-6 space-y-3">
+                  <.link
+                    href={~p"/settings/email-preferences"}
+                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900"
+                  >
+                    Manage All Preferences
+                  </.link>
+
+                  <div>
+                    <.link
+                      href={~p"/"}
+                      class="text-sm text-zinc-600 hover:text-zinc-800"
+                    >
+                      Return to homepage
+                    </.link>
+                  </div>
+                </div>
+              </div>
+            <% else %>
+              <div class="text-center">
+                <h3 class="text-lg font-medium text-zinc-900">
+                  Unsubscribe from <%= humanize_preference_type(@preference_type) %>
+                </h3>
+
+                <p class="mt-2 text-sm text-zinc-600">
+                  Are you sure you want to stop receiving <%= humanize_preference_type(@preference_type) %>?
+                </p>
+
+                <div class="mt-6 space-y-3">
+                  <button
+                    type="button"
+                    phx-click="unsubscribe"
+                    class="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                  >
+                    Yes, Unsubscribe
+                  </button>
+
+                  <.link
+                    href={~p"/settings/email-preferences"}
+                    class="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-zinc-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900"
+                  >
+                    Manage All Preferences
+                  </.link>
+                </div>
+
+                <p class="mt-4 text-xs text-zinc-500">
+                  You will continue to receive important account-related emails.
+                </p>
+              </div>
+            <% end %>
+          <% end %>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp humanize_preference_type("marketing"), do: "marketing emails"
+  defp humanize_preference_type("newsletter"), do: "our newsletter"
+  defp humanize_preference_type("product_updates"), do: "product updates"
+  defp humanize_preference_type("tips"), do: "tips and tutorials"
+  defp humanize_preference_type(type), do: Phoenix.Naming.humanize(type)
+
+  defp get_ip_address(nil), do: nil
+  defp get_ip_address({ip, _port}), do: :inet.ntoa(ip) |> to_string()
+end
