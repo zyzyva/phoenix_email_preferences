@@ -47,19 +47,19 @@ defmodule Mix.Tasks.Phx.Gen.EmailPreferences do
     files =
       [
         # Migrations
-        {:eex, "migration_user_preferences.exs", Path.join(["priv/repo/migrations", "#{timestamp()}_create_user_email_preferences.exs"])},
-        {:eex, "migration_preference_history.exs", Path.join(["priv/repo/migrations", "#{timestamp() + 1}_create_email_preference_history.exs"])},
+        {:eex, "migration_user_preferences", Path.join(["priv/repo/migrations", "#{timestamp()}_create_user_email_preferences.exs"])},
+        {:eex, "migration_preference_history", Path.join(["priv/repo/migrations", "#{timestamp() + 1}_create_email_preference_history.exs"])},
         # Schemas
-        {:eex, "user_preference.ex", Path.join([context_lib_path, "email_preferences/user_preference.ex"])},
-        {:eex, "preference_history.ex", Path.join([context_lib_path, "email_preferences/preference_history.ex"])},
+        {:eex, "user_preference", Path.join([context_lib_path, "email_preferences/user_preference.ex"])},
+        {:eex, "preference_history", Path.join([context_lib_path, "email_preferences/preference_history.ex"])},
         # Context
-        {:eex, "email_preferences.ex", Path.join([context_lib_path, "email_preferences.ex"])},
-        {:eex, "telemetry.ex", Path.join([context_lib_path, "email_preferences/telemetry.ex"])},
+        {:eex, "email_preferences", Path.join([context_lib_path, "email_preferences.ex"])},
+        {:eex, "telemetry", Path.join([context_lib_path, "email_preferences/telemetry.ex"])},
         # Components
-        {:eex, "email_preferences_components.ex", Path.join([web_prefix, "components/email_preferences_components.ex"])},
+        {:eex, "email_preferences_components", Path.join([web_prefix, "components/email_preferences_components.ex"])},
         # LiveViews
-        {:eex, "email_preferences_live.ex", Path.join([web_prefix, "live/email_preferences_live.ex"])},
-        {:eex, "unsubscribe_live.ex", Path.join([web_prefix, "live/unsubscribe_live.ex"])}
+        {:eex, "email_preferences_live", Path.join([web_prefix, "live/email_preferences_live.ex"])},
+        {:eex, "unsubscribe_live", Path.join([web_prefix, "live/unsubscribe_live.ex"])}
       ]
 
     Mix.Phoenix.copy_from(paths, "priv/templates", binding, files)
