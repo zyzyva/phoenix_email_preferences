@@ -182,9 +182,10 @@ defmodule <%= @web_module %>.EmailPreferencesModal do
     socket = assign(socket, :saving, true)
 
     # Convert checked map to preferences format
+    # Include ALL preferences, both checked and unchecked
     preferences =
       Enum.reduce(socket.assigns.checked, %{}, fn {type, checked}, acc ->
-        if checked, do: Map.put(acc, type, "true"), else: acc
+        Map.put(acc, type, if(checked, do: "true", else: "false"))
       end)
 
     # Save preferences

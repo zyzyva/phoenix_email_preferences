@@ -332,4 +332,37 @@ defmodule Mix.Tasks.Phx.Gen.EmailPreferencesTest do
       assert context_template =~ "user_agent:"
     end
   end
+
+  describe "bug fixes" do
+    test "needs_preference_setup? doesn't trigger auto-initialization" do
+      context_template =
+        File.read!(Path.join([__DIR__, "../../../priv/templates/email_preferences.txt"]))
+
+      # Should NOT call get_user_preferences (which auto-initializes)
+      refute context_template =~ ~r/def needs_preference_setup\?\(user_id\) do\s+preferences = get_user_preferences/
+
+      # Should query directly using Repo
+      assert context_template =~ "def needs_preference_setup?(user_id) do"
+      assert context_template =~ "Repo.one("
+      assert context_template =~ "from p in UserPreference"
+      assert context_template =~ "where: p.user_id == ^user_id"
+      assert context_template =~ "select: count(p.id)"
+      assert context_template =~ "count == 0"
+    end
+
+    test "modal includes both checked and unchecked preferences" do
+      modal_template =
+        File.read!(Path.join([__DIR__, "../../../priv/templates/email_preferences_modal.txt"]))
+
+      # Should include ALL preferences in the map
+      assert modal_template =~ "# Include ALL preferences, both checked and unchecked"
+
+      # Should not use the old buggy pattern that omits unchecked
+      refute modal_template =~
+               ~r/if checked, do: Map\.put\(acc, type, "true"\), else: acc/
+
+      # Should use the fixed pattern that includes all
+      assert modal_template =~ ~r/Map\.put\(acc, type, if\(checked, do: "true", else: "false"\)\)/
+    end
+  end
 end
