@@ -83,16 +83,16 @@ defmodule <%= @web_module %>.EmailPreferencesLive do
     ~H"""
     <div class="mx-auto max-w-4xl">
       <.header>
-        Email Preferences
+        <h1>Email Preferences</h1>
         <:subtitle>Manage which emails you receive from us</:subtitle>
       </.header>
 
       <div class="mt-8 space-y-6">
         <!-- Categorized preferences -->
         <%= for {category, preferences} <- @categorized_preferences do %>
-          <div class="bg-white dark:bg-gray-800 shadow sm:rounded-lg">
+          <section class="bg-white dark:bg-gray-800 shadow sm:rounded-lg" aria-labelledby={"category-#{String.replace(category["name"], " ", "-") |> String.downcase()}"}>
             <div class="border-b border-gray-200 dark:border-gray-700 px-4 py-5 sm:px-6">
-              <h2 class="text-base font-semibold leading-6 text-gray-900 dark:text-gray-100">
+              <h2 id={"category-#{String.replace(category["name"], " ", "-") |> String.downcase()}"} class="text-base font-semibold leading-6 text-gray-900 dark:text-gray-100">
                 <%= category["name"] %>
               </h2>
               <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -118,11 +118,11 @@ defmodule <%= @web_module %>.EmailPreferencesLive do
                         </p>
 
                         <!-- Frequency and status information -->
-                        <div class="mt-2 flex flex-wrap gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                        <div class="mt-2 flex flex-wrap gap-2 text-xs">
                           <%= if pref["frequency"] do %>
-                            <span class="inline-flex items-center rounded-md bg-gray-50 dark:bg-gray-700 px-2 py-1">
+                            <span class="inline-flex items-center rounded-md bg-gray-100 dark:bg-gray-700 px-2 py-1 text-gray-700 dark:text-gray-300">
                               <span class="sr-only">Frequency:</span>
-                              <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
                               <%= format_frequency(pref["frequency"]) %>
@@ -130,8 +130,8 @@ defmodule <%= @web_module %>.EmailPreferencesLive do
                           <% end %>
 
                           <%= if pref.opted_in && pref.opted_in_at do %>
-                            <span class="inline-flex items-center text-green-700">
-                              <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                            <span class="inline-flex items-center text-green-700 dark:text-green-400">
+                              <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
                               </svg>
                               Subscribed <%= format_date(pref.opted_in_at) %>
@@ -186,7 +186,7 @@ defmodule <%= @web_module %>.EmailPreferencesLive do
                             role="status"
                             aria-label={"#{pref["name"]} is required for security"}
                           >
-                            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                               <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
                             </svg>
                             Required
@@ -206,7 +206,7 @@ defmodule <%= @web_module %>.EmailPreferencesLive do
                 </div>
               </fieldset>
             </div>
-          </div>
+          </section>
         <% end %>
 
         <!-- Unsubscribe all button -->
