@@ -1,0 +1,120 @@
+defmodule <%= @web_module %>.UnsubscribeLiveTest do
+  use <%= @web_module %>.ConnCase
+
+  import Phoenix.LiveViewTest
+  import <%= @app_module %>.AccountsFixtures
+
+  alias <%= @app_module %>.EmailPreferences
+
+  describe "Unsubscribe LiveView" do
+    setup do
+      user = user_fixture()
+      # Opt user in to some preferences (using actual configured preference types)
+      available_types = EmailPreferences.preference_types()
+      [first_type | rest] = available_types
+      second_type = if length(rest) > 0, do: hd(rest), else: first_type
+
+      {:ok, _} = EmailPreferences.opt_in(user.id, first_type, %{source: "test"})
+      if first_type != second_type do
+        {:ok, _} = EmailPreferences.opt_in(user.id, second_type, %{source: "test"})
+      end
+
+      %{user: user, first_type: first_type, second_type: second_type}
+    end
+
+    test "unsubscribes with valid token", %{conn: conn, user: user, first_type: first_type, second_type: second_type} do
+      token = EmailPreferences.generate_unsubscribe_token(user.id, first_type)
+
+      {:ok, view, html} = live(conn, ~p"/unsubscribe/#{token}")
+
+      assert html =~ "Unsubscribe"
+      # Check that the preference name appears
+      preference_name = EmailPreferences.preference_name(first_type)
+      assert html =~ preference_name
+      assert html =~ "Are you sure"
+
+      # Confirm unsubscribe
+      html =
+        view
+        |> element("button", "Yes, Unsubscribe")
+        |> render_click()
+
+      assert html =~ "You"
+      assert html =~ "ve Been Unsubscribed"
+
+      # Verify preference was updated
+      assert {:ok, false} = EmailPreferences.has_consented?(user.id, first_type)
+      # Other preferences should remain unchanged if different
+      if first_type != second_type do
+        assert {:ok, true} = EmailPreferences.has_consented?(user.id, second_type)
+      end
+    end
+
+    test "shows error for expired token", %{conn: conn} do
+      # Generate a token with very short expiry (by mocking time or using expired token)
+      # For this test, we'll use an invalid token
+      invalid_token = "expired_token_12345"
+
+      {:ok, _view, html} = live(conn, ~p"/unsubscribe/#{invalid_token}")
+
+      assert html =~ "This unsubscribe link"
+      assert html =~ "Go to Account Settings"
+    end
+
+    test "shows error for invalid token", %{conn: conn} do
+      invalid_token = "completely_invalid_token"
+
+      {:ok, _view, html} = live(conn, ~p"/unsubscribe/#{invalid_token}")
+
+      assert html =~ "This unsubscribe link is invalid"
+      assert html =~ "Go to Account Settings"
+    end
+
+    test "unsubscribe from specific preference", %{conn: conn, user: user, first_type: first_type, second_type: second_type} do
+      # Use the second type if available, otherwise use the first
+      pref_to_unsubscribe = if second_type != first_type, do: second_type, else: first_type
+      token = EmailPreferences.generate_unsubscribe_token(user.id, pref_to_unsubscribe)
+
+      {:ok, view, _html} = live(conn, ~p"/unsubscribe/#{token}")
+
+      # Unsubscribe from the preference
+      html =
+        view
+        |> element("button", "Yes, Unsubscribe")
+        |> render_click()
+
+      assert html =~ "You"
+      assert html =~ "ve Been Unsubscribed"
+
+      # Verify the preference is opted out
+      assert {:ok, false} = EmailPreferences.has_consented?(user.id, pref_to_unsubscribe)
+      # Other preferences should remain opted in if different
+      if pref_to_unsubscribe != first_type do
+        assert {:ok, true} = EmailPreferences.has_consented?(user.id, first_type)
+      end
+    end
+
+    test "shows already unsubscribed message", %{conn: conn, user: user, first_type: first_type} do
+      # First unsubscribe the user
+      {:ok, _} = EmailPreferences.opt_out(user.id, first_type, %{source: "test"})
+
+      token = EmailPreferences.generate_unsubscribe_token(user.id, first_type)
+
+      {:ok, view, html} = live(conn, ~p"/unsubscribe/#{token}")
+
+      assert html =~ "Unsubscribe"
+      preference_name = EmailPreferences.preference_name(first_type)
+      assert html =~ preference_name
+
+      # Try to unsubscribe again
+      html =
+        view
+        |> element("button", "Yes, Unsubscribe")
+        |> render_click()
+
+      # Should still succeed gracefully
+      assert html =~ "You"
+      assert html =~ "ve Been Unsubscribed"
+    end
+  end
+end

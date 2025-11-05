@@ -1,0 +1,183 @@
+defmodule <%= @app_module %>.EmailPreferences.Config do
+  @moduledoc """
+  Manages email preference configuration loaded from JSON file.
+  Uses Elixir's built-in JSON module for parsing.
+  """
+
+  @config_file "priv/email_preferences.json"
+  @app_name "<%= @app_name %>"
+
+  @doc """
+  Loads and caches the configuration from JSON file.
+  """
+  def load_config do
+    path = Application.app_dir(:<%= @app_name %>, @config_file)
+
+    case File.read(path) do
+      {:ok, content} ->
+        JSON.decode!(content)
+      {:error, reason} ->
+        raise "Failed to load email preferences config: #{inspect(reason)}"
+    end
+  end
+
+  @doc """
+  Returns all enabled preference types for the app.
+  """
+  def preference_types(app \\ @app_name) do
+    config = load_config()
+    config["apps"][to_string(app)]["enabled_preferences"] || []
+  end
+
+  @doc """
+  Returns detailed configuration for a specific preference type.
+  """
+  def preference_details(preference_type) do
+    config = load_config()
+    config["preferences"][preference_type]
+  end
+
+  @doc """
+  Returns all preferences grouped by category, sorted by priority.
+  """
+  def categorized_preferences(app \\ @app_name) do
+    config = load_config()
+    enabled = config["apps"][to_string(app)]["enabled_preferences"] || []
+    preferences = config["preferences"]
+    categories = config["categories"]
+
+    # Filter to only enabled preferences
+    enabled_prefs =
+      preferences
+      |> Enum.filter(fn {key, _} -> key in enabled end)
+      |> Enum.map(fn {key, pref} -> Map.put(pref, "key", key) end)
+
+    # Group by category
+    grouped = Enum.group_by(enabled_prefs, & &1["category"])
+
+    # Sort categories by priority and include category metadata
+    categories
+    |> Enum.sort_by(fn {_, cat} -> cat["priority"] end)
+    |> Enum.map(fn {cat_key, cat_info} ->
+      prefs = grouped[cat_key] || []
+      {cat_info, prefs}
+    end)
+    |> Enum.filter(fn {_, prefs} -> length(prefs) > 0 end)
+  end
+
+  @doc """
+  Returns the list of preferences that should be opted-in by default.
+  """
+  def default_opted_in(app \\ @app_name) do
+    config = load_config()
+    config["apps"][to_string(app)]["default_preferences"] || []
+  end
+
+  @doc """
+  Checks if a preference type can be opted out of.
+  """
+  def can_opt_out?(preference_type) do
+    case preference_details(preference_type) do
+      nil -> true
+      details -> Map.get(details, "can_opt_out", true)
+    end
+  end
+
+  @doc """
+  Returns the human-readable name for a preference type.
+  """
+  def preference_name(preference_type) do
+    case preference_details(preference_type) do
+      nil -> Phoenix.Naming.humanize(preference_type)
+      details -> details["name"]
+    end
+  end
+
+  @doc """
+  Returns the description for a preference type.
+  """
+  def preference_description(preference_type) do
+    case preference_details(preference_type) do
+      nil -> ""
+      details -> details["description"]
+    end
+  end
+
+  @doc """
+  Returns the ARIA description for accessibility.
+  Falls back to regular description if not specified.
+  """
+  def aria_description(preference_type) do
+    case preference_details(preference_type) do
+      nil -> ""
+      details -> Map.get(details, "aria_description", details["description"])
+    end
+  end
+
+  @doc """
+  Returns the frequency for a preference type.
+  """
+  def preference_frequency(preference_type) do
+    case preference_details(preference_type) do
+      nil -> nil
+      details -> details["frequency"]
+    end
+  end
+
+  @doc """
+  Returns the list of default preferences from configuration.
+  These are the preferences that should be opted-in by default.
+  """
+  def default_preferences do
+    config = load_config()
+    app_name = "<%= @app_name %>"
+    app_config = config["apps"][app_name] || %{}
+    app_config["default_preferences"] || []
+  end
+
+  @doc """
+  Validates that all required fields are present in the configuration.
+  Should be called during application startup.
+  """
+  def validate_config! do
+    config = load_config()
+
+    # Check required top-level keys
+    required_keys = ["preferences", "categories", "apps"]
+    missing_keys = required_keys -- Map.keys(config)
+
+    if length(missing_keys) > 0 do
+      raise "Missing required config keys: #{inspect(missing_keys)}"
+    end
+
+    # Validate each preference
+    Enum.each(config["preferences"], fn {key, pref} ->
+      validate_preference!(key, pref)
+    end)
+
+    # Validate categories
+    Enum.each(config["categories"], fn {key, cat} ->
+      validate_category!(key, cat)
+    end)
+
+    :ok
+  end
+
+  defp validate_preference!(key, pref) do
+    required = ["name", "description", "category", "can_opt_out", "default_opted_in"]
+    missing = required -- Map.keys(pref)
+
+    if length(missing) > 0 do
+      raise "Preference '#{key}' missing required fields: #{inspect(missing)}"
+    end
+  end
+
+  defp validate_category!(key, cat) do
+    required = ["name", "description", "priority"]
+    missing = required -- Map.keys(cat)
+
+    if length(missing) > 0 do
+      raise "Category '#{key}' missing required fields: #{inspect(missing)}"
+    end
+  end
+end

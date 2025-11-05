@@ -2,6 +2,18 @@
 
 Email preference management for Phoenix applications with phx.gen.auth.
 
+## Features
+
+- ✅ Opt-in/opt-out preference management
+- ✅ Email preference history with full audit trail
+- ✅ Secure unsubscribe tokens for email links
+- ✅ Phoenix LiveView UI with real-time updates
+- ✅ Comprehensive test generation (30+ tests)
+- ✅ Compatible with Phoenix authentication generators
+- ✅ Telemetry events for monitoring
+- ✅ Mobile-responsive design
+- ✅ Full removal task for easy cleanup
+
 ## Installation
 
 Add to your `mix.exs`:
@@ -51,14 +63,31 @@ scope "/", YourAppWeb do
 end
 ```
 
-## Features
+## Removing Email Preferences
 
-- Opt-in/opt-out management
-- Email preference history (audit trail)
-- Unsubscribe tokens
-- LiveView UI
-- Telemetry events
-- Mobile-responsive
+If you need to remove the email preferences functionality from your application, use the removal task:
+
+```bash
+mix phx.gen.email_preferences.remove
+```
+
+This will:
+- Roll back the database migrations (if applied)
+- Remove all generated files
+- Provide instructions for manually removing routes
+
+### Removal Options
+
+- `--no-rollback` - Skip rolling back migrations (only remove files)
+- `--force` - Don't prompt for confirmation
+
+```bash
+# Remove without rolling back migrations
+mix phx.gen.email_preferences.remove --no-rollback
+
+# Remove without confirmation prompt
+mix phx.gen.email_preferences.remove --force
+```
 
 ## Preference Types
 

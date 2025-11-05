@@ -1,0 +1,41 @@
+{
+  "preferences": {
+    "product_updates": {
+      "name": "Product Updates",
+      "description": "Important new features and changes to our product",
+      "category": "product",
+      "default_opted_in": true,
+      "can_opt_out": true,
+      "frequency": "monthly"
+    },
+    "promotional": {
+      "name": "Special Offers",
+      "description": "Exclusive discounts and promotional offers",
+      "category": "marketing",
+      "default_opted_in": true,
+      "can_opt_out": true,
+      "frequency": "variable"
+    }
+  },
+  "categories": {
+    "product": {
+      "name": "Product News",
+      "description": "Updates about new features, improvements, and changes to our product",
+      "priority": 1
+    },
+    "marketing": {
+      "name": "Promotions",
+      "description": "Special offers, discounts, and promotional content",
+      "priority": 2
+    }
+  },
+  "apps": {
+    "<%= @app_name %>": {
+      "enabled_preferences": [
+        "product_updates",
+        "promotional"
+      ],
+      "default_preferences": ["product_updates", "promotional"]
+    }
+  }
+}

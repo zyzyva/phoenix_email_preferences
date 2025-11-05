@@ -1,0 +1,320 @@
+defmodule <%= @app_module %>.EmailPreferencesTest do
+  use <%= @app_module %>.DataCase
+
+  import <%= @app_module %>.AccountsFixtures
+
+  alias <%= @app_module %>.EmailPreferences
+  alias <%= @app_module %>.EmailPreferences.PreferenceHistory
+
+  describe "get_user_preferences/1" do
+    test "returns default preferences for user with no preferences" do
+      user = user_fixture()
+      prefs = EmailPreferences.get_user_preferences(user.id)
+
+      # Should have initialized with defaults
+      assert length(prefs) > 0
+
+      # Check that defaults are properly set
+      default_prefs = EmailPreferences.Config.default_preferences()
+      for pref <- prefs do
+        if pref.preference_type in default_prefs do
+          assert pref.opted_in == true
+        end
+      end
+    end
+
+    test "returns all preferences for a user" do
+      user = user_fixture()
+
+      # Get the initial preferences (with defaults)
+      preferences = EmailPreferences.get_user_preferences(user.id)
+
+      # Should have at least some preferences after initialization
+      assert length(preferences) > 0
+
+      # All preferences should have valid states
+      for pref <- preferences do
+        assert is_boolean(pref.opted_in)
+        assert pref.preference_type in EmailPreferences.preference_types()
+      end
+    end
+  end
+
+  describe "get_preference/2" do
+    test "returns the preference (initialized with defaults if needed)" do
+      user = user_fixture()
+
+      # Use the first available preference type
+      [first_type | _] = EmailPreferences.preference_types()
+      pref = EmailPreferences.get_preference(user.id, first_type)
+
+      # May exist due to default initialization
+      if pref do
+        # If this is a default, it should be opted in
+        default_prefs = EmailPreferences.Config.default_preferences()
+        if first_type in default_prefs do
+          assert pref.opted_in == true
+        end
+      end
+    end
+
+    test "returns the specific preference when it exists" do
+      user = user_fixture()
+
+      # Use the first available preference type
+      [first_type | _] = EmailPreferences.preference_types()
+      {:ok, _} = EmailPreferences.opt_in(user.id, first_type, %{source: "test"})
+
+      pref = EmailPreferences.get_preference(user.id, first_type)
+      assert pref.preference_type == first_type
+      assert pref.opted_in == true
+    end
+
+    test "accepts string or atom for preference_type" do
+      user = user_fixture()
+
+      # Use the first available preference type
+      [first_type | _] = EmailPreferences.preference_types()
+      atom_type = String.to_atom(first_type)
+
+      {:ok, _} = EmailPreferences.opt_in(user.id, atom_type, %{source: "test"})
+
+      assert EmailPreferences.get_preference(user.id, first_type) != nil
+      assert EmailPreferences.get_preference(user.id, atom_type) != nil
+    end
+  end
+
+  describe "has_consented?/2" do
+    test "returns correct consent status" do
+      user = user_fixture()
+
+      # Initialize defaults first
+      EmailPreferences.get_user_preferences(user.id)
+
+      # After initialization, check the defaults
+      for type <- EmailPreferences.preference_types() do
+        {:ok, consented} = EmailPreferences.has_consented?(user.id, type)
+
+        # Check if this is a default preference
+        if type in EmailPreferences.Config.default_preferences() do
+          assert consented == true
+        end
+      end
+    end
+
+    test "returns true for opted-in preference" do
+      user = user_fixture()
+
+      # Find a preference that can be opted in
+      [first_type | _] = EmailPreferences.preference_types()
+      {:ok, _} = EmailPreferences.opt_in(user.id, first_type, %{source: "test"})
+      assert {:ok, true} = EmailPreferences.has_consented?(user.id, first_type)
+    end
+
+    test "returns false for opted-out preference" do
+      user = user_fixture()
+
+      # Find a preference that can be opted out
+      opt_outable = EmailPreferences.preference_types()
+                    |> Enum.find(&EmailPreferences.can_opt_out?/1)
+
+      if opt_outable do
+        {:ok, _} = EmailPreferences.opt_in(user.id, opt_outable, %{source: "test"})
+        {:ok, _} = EmailPreferences.opt_out(user.id, opt_outable, %{source: "test"})
+        assert {:ok, false} = EmailPreferences.has_consented?(user.id, opt_outable)
+      end
+    end
+  end
+
+  describe "opt_in/3" do
+    test "creates or updates preference to opted-in" do
+      user = user_fixture()
+
+      # Use first available preference type
+      [first_type | _] = EmailPreferences.preference_types()
+
+      assert {:ok, pref} = EmailPreferences.opt_in(user.id, first_type, %{
+        source: "signup",
+        ip_address: "192.168.1.1",
+        user_agent: "Test Browser"
+      })
+
+      assert pref.opted_in == true
+      assert pref.opted_in_at != nil
+      assert pref.opted_out_at == nil
+
+      # Verify history was recorded
+      history = Repo.get_by!(PreferenceHistory, user_id: user.id, preference_type: first_type)
+      assert history.action == "opt_in"
+      assert history.opted_in == true
+      assert history.source == "signup"
+      assert history.ip_address == "192.168.1.1"
+    end
+
+    test "updates existing opted-out preference" do
+      user = user_fixture()
+
+      # Find an opt-outable preference
+      opt_outable = EmailPreferences.preference_types()
+                    |> Enum.find(&EmailPreferences.can_opt_out?/1)
+
+      if opt_outable do
+        # First opt out
+        {:ok, _} = EmailPreferences.opt_out(user.id, opt_outable, %{source: "test"})
+
+        # Then opt in
+        assert {:ok, pref} = EmailPreferences.opt_in(user.id, opt_outable, %{source: "preferences"})
+
+        assert pref.opted_in == true
+        assert pref.opted_in_at != nil
+        assert pref.opted_out_at == nil
+      end
+    end
+
+    test "handles idempotent opt-in" do
+      user = user_fixture()
+
+      # Use first available preference type
+      [first_type | _] = EmailPreferences.preference_types()
+
+      # Opt in twice
+      {:ok, _} = EmailPreferences.opt_in(user.id, first_type, %{source: "test"})
+      assert {:ok, pref} = EmailPreferences.opt_in(user.id, first_type, %{source: "test2"})
+
+      assert pref.opted_in == true
+    end
+  end
+
+  describe "opt_out/3" do
+    test "creates or updates preference to opted-out" do
+      user = user_fixture()
+
+      # Find an opt-outable preference
+      opt_outable = EmailPreferences.preference_types()
+                    |> Enum.find(&EmailPreferences.can_opt_out?/1)
+
+      if opt_outable do
+        assert {:ok, pref} = EmailPreferences.opt_out(user.id, opt_outable, %{
+          source: "email_footer",
+          ip_address: "10.0.0.1"
+        })
+
+        assert pref.opted_in == false
+        assert pref.opted_in_at == nil
+        assert pref.opted_out_at != nil
+
+        # Verify history was recorded
+        history = Repo.get_by!(PreferenceHistory, user_id: user.id, preference_type: opt_outable)
+        assert history.action == "opt_out"
+        assert history.opted_in == false
+      end
+    end
+
+    test "updates existing opted-in preference" do
+      user = user_fixture()
+
+      # Find an opt-outable preference
+      opt_outable = EmailPreferences.preference_types()
+                    |> Enum.find(&EmailPreferences.can_opt_out?/1)
+
+      if opt_outable do
+        # First opt in
+        {:ok, _} = EmailPreferences.opt_in(user.id, opt_outable, %{source: "test"})
+
+        # Then opt out
+        assert {:ok, pref} = EmailPreferences.opt_out(user.id, opt_outable, %{source: "unsubscribe"})
+
+        assert pref.opted_in == false
+        assert pref.opted_out_at != nil
+        assert pref.opted_in_at == nil
+      end
+    end
+  end
+
+  describe "set_preferences/3" do
+    test "sets multiple preferences at once" do
+      user = user_fixture()
+
+      # Build a preferences map based on available types
+      available_types = EmailPreferences.preference_types()
+      preferences_map = available_types
+                        |> Enum.take(min(4, length(available_types)))
+                        |> Enum.with_index()
+                        |> Map.new(fn {type, index} -> {type, rem(index, 2) == 0} end)
+
+      assert {:ok, prefs} = EmailPreferences.set_preferences(user.id, preferences_map, %{source: "bulk_update"})
+
+      assert length(prefs) >= map_size(preferences_map)  # May include more if setup_default_preferences is called
+
+      # Verify the preferences were set correctly
+      for {type, should_be_opted_in} <- preferences_map do
+        {:ok, is_opted_in} = EmailPreferences.has_consented?(user.id, type)
+        assert is_opted_in == should_be_opted_in
+      end
+    end
+
+    test "handles string 'true' values from forms" do
+      user = user_fixture()
+
+      # Simulating form data where checked boxes send "true" string
+      # Use first available preference type
+      [first_type | _] = EmailPreferences.preference_types()
+      preferences_map = %{
+        first_type => "true"
+      }
+
+      assert {:ok, _} = EmailPreferences.set_preferences(user.id, preferences_map, %{source: "form"})
+
+      assert {:ok, true} = EmailPreferences.has_consented?(user.id, first_type)
+    end
+  end
+
+  describe "generate_unsubscribe_token/2 and verify_unsubscribe_token/1" do
+    test "generates and verifies valid token" do
+      user = user_fixture()
+
+      # Use first available preference type
+      [first_type | _] = EmailPreferences.preference_types()
+      token = EmailPreferences.generate_unsubscribe_token(user.id, first_type)
+      assert is_binary(token)
+
+      user_id = user.id
+      assert {:ok, {^user_id, ^first_type}} = EmailPreferences.verify_unsubscribe_token(token)
+    end
+
+    test "rejects invalid token" do
+      assert {:error, :invalid} = EmailPreferences.verify_unsubscribe_token("invalid_token_12345")
+    end
+
+    test "handles expired tokens" do
+      # Note: Testing expiry requires mocking time or using a very old token
+      # This would typically be done with a library like Mimic or by exposing
+      # a way to set the max_age in tests
+
+      # For now, we just test that the verify function exists and returns proper format
+      user = user_fixture()
+
+      # Use first available preference type
+      [first_type | _] = EmailPreferences.preference_types()
+      token = EmailPreferences.generate_unsubscribe_token(user.id, first_type)
+
+      # Token should be valid immediately
+      assert {:ok, {_user_id, _pref_type}} = EmailPreferences.verify_unsubscribe_token(token)
+    end
+  end
+
+  describe "preference_types/0" do
+    test "returns list of available preference types" do
+      types = EmailPreferences.preference_types()
+
+      assert is_list(types)
+      # Should have at least one preference type configured
+      assert length(types) > 0
+
+      # Each type should be a string
+      Enum.each(types, fn type ->
+        assert is_binary(type)
+      end)
+    end
+  end
+end

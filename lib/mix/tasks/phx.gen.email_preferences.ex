@@ -24,99 +24,51 @@ defmodule Mix.Tasks.Phx.Gen.EmailPreferences do
 
   use Mix.Task
 
+  alias Mix.Tasks.Phx.Gen.EmailPreferences.{
+    TemplateLoader,
+    FileGenerator,
+    ShellInstructions
+  }
+
   @impl Mix.Task
   def run(_args) do
-    if Mix.Project.umbrella?() do
-      Mix.raise("mix phx.gen.email_preferences must be invoked from within your *_web application root directory")
-    end
+    validate_project_structure!()
 
     context_app = Mix.Phoenix.context_app()
     web_prefix = Mix.Phoenix.web_path(context_app)
     context_lib_path = Mix.Phoenix.context_lib_path(context_app, "")
 
-    binding = [
+    binding = build_binding(context_app)
+
+    validate_module_availability!(binding)
+
+    templates = TemplateLoader.load_all()
+    FileGenerator.generate_all(context_app, web_prefix, context_lib_path, binding, templates)
+    ShellInstructions.print(binding)
+  end
+
+  defp validate_project_structure! do
+    if Mix.Project.umbrella?() do
+      Mix.raise("""
+      mix phx.gen.email_preferences must be invoked from within your *_web
+      application root directory
+      """)
+    end
+  end
+
+  defp build_binding(context_app) do
+    base_module = Macro.camelize(Atom.to_string(context_app))
+
+    [
       context_app: context_app,
-      web_module: Module.concat([Macro.camelize(Atom.to_string(context_app)), "Web"]),
-      app_module: Macro.camelize(Atom.to_string(context_app))
+      web_module: "#{base_module}Web",
+      app_module: base_module,
+      app_name: Atom.to_string(context_app)
     ]
-
-    Mix.Phoenix.check_module_name_availability!(Module.concat([context_app, "EmailPreferences"]))
-
-    paths = generator_paths()
-
-    files =
-      [
-        # Migrations
-        {:eex, "migration_user_preferences", Path.join(["priv/repo/migrations", "#{timestamp()}_create_user_email_preferences.exs"])},
-        {:eex, "migration_preference_history", Path.join(["priv/repo/migrations", "#{timestamp() + 1}_create_email_preference_history.exs"])},
-        # Schemas
-        {:eex, "user_preference", Path.join([context_lib_path, "email_preferences/user_preference.ex"])},
-        {:eex, "preference_history", Path.join([context_lib_path, "email_preferences/preference_history.ex"])},
-        # Context
-        {:eex, "email_preferences", Path.join([context_lib_path, "email_preferences.ex"])},
-        {:eex, "telemetry", Path.join([context_lib_path, "email_preferences/telemetry.ex"])},
-        # Components
-        {:eex, "email_preferences_components", Path.join([web_prefix, "components/email_preferences_components.ex"])},
-        # LiveViews
-        {:eex, "email_preferences_live", Path.join([web_prefix, "live/email_preferences_live.ex"])},
-        {:eex, "unsubscribe_live", Path.join([web_prefix, "live/unsubscribe_live.ex"])}
-      ]
-
-    Mix.Phoenix.copy_from(paths, "priv/templates", binding, files)
-
-    print_shell_instructions(binding)
   end
 
-  defp generator_paths do
-    [".", :phoenix_email_preferences]
+  defp validate_module_availability!(binding) do
+    module_name = Module.concat([binding[:context_app], "EmailPreferences"])
+    Mix.Phoenix.check_module_name_availability!(module_name)
   end
-
-  defp print_shell_instructions(binding) do
-    Mix.shell().info("""
-
-    Email preferences have been generated!
-
-    Next steps:
-
-    1. Run migrations:
-
-        $ mix ecto.migrate
-
-    2. Add routes to your router.ex:
-
-        scope "/", #{binding[:web_module]} do
-          pipe_through [:browser, :require_authenticated_user]
-
-          live "/settings/email-preferences", EmailPreferencesLive, :index
-        end
-
-        scope "/", #{binding[:web_module]} do
-          pipe_through :browser
-
-          live "/unsubscribe/:token", UnsubscribeLive, :show
-        end
-
-    3. Add to your user registration form:
-
-        <.signup_preferences
-          preferences={EmailPreferences.preference_types()}
-          checked_types={["newsletter"]}
-        />
-
-    4. Handle preferences in your registration controller:
-
-        preferences = Map.get(user_params, "preferences", %{})
-        EmailPreferences.set_preferences(user.id, preferences, %{source: "signup"})
-
-    """)
-  end
-
-  defp timestamp do
-    {{y, m, d}, {hh, mm, ss}} = :calendar.universal_time()
-    "#{y}#{pad(m)}#{pad(d)}#{pad(hh)}#{pad(mm)}#{pad(ss)}"
-    |> String.to_integer()
-  end
-
-  defp pad(i) when i < 10, do: <<?0, ?0 + i>>
-  defp pad(i), do: to_string(i)
 end

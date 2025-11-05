@@ -1,0 +1,91 @@
+defmodule <%= @web_module %>.EmailPreferencesComponents do
+  @moduledoc """
+  Email preference components for forms and settings.
+  Provides a simple checkbox component that can be used anywhere in your application.
+  """
+  use Phoenix.Component
+
+  @doc """
+  Renders a single email preference opt-in checkbox.
+
+  Can be used standalone in any form, such as:
+  - Registration forms (single marketing consent)
+  - Contact forms (newsletter subscription)
+  - Checkout flows (order updates)
+
+  ## Examples
+
+      <.opt_in_checkbox
+        preference_type="promotional"
+        label="Send me special offers and updates"
+        checked={false}
+      />
+
+      <.opt_in_checkbox
+        preference_type="newsletter"
+        description="Weekly tips and industry news"
+      />
+  """
+  attr :preference_type, :string, required: true
+  attr :label, :string, default: nil
+  attr :checked, :boolean, default: false
+  attr :description, :string, default: nil
+  attr :name, :string, default: nil
+  attr :class, :string, default: nil
+  attr :disabled, :boolean, default: false
+
+  def opt_in_checkbox(assigns) do
+    assigns = assign_new(assigns, :label, fn ->
+      humanize_preference_type(assigns.preference_type)
+    end)
+
+    assigns = assign_new(assigns, :name, fn ->
+      "preferences[#{assigns.preference_type}]"
+    end)
+
+    ~H"""
+    <div class={["flex items-start", @class]}>
+      <div class="flex h-6 items-center">
+        <input
+          type="checkbox"
+          name={@name}
+          id={"preference_#{@preference_type}"}
+          checked={@checked}
+          disabled={@disabled}
+          value="true"
+          class={[
+            "h-4 w-4 rounded border-gray-300 dark:border-gray-600",
+            if(@disabled,
+              do: "text-gray-400 dark:text-gray-500 cursor-not-allowed",
+              else: "text-zinc-900 dark:text-zinc-100 focus:ring-zinc-900 dark:focus:ring-zinc-300"
+            )
+          ]}
+        />
+      </div>
+      <div class="ml-3">
+        <label for={"preference_#{@preference_type}"} class={[
+          "text-sm font-medium",
+          if(@disabled, do: "text-gray-500 dark:text-gray-400", else: "text-zinc-900 dark:text-zinc-100 cursor-pointer")
+        ]}>
+          {@label}
+        </label>
+        <p :if={@description} class="text-sm text-zinc-600 dark:text-zinc-400">
+          {@description}
+        </p>
+      </div>
+    </div>
+    """
+  end
+
+  # Default humanization for common preference types
+  defp humanize_preference_type("marketing"), do: "Marketing emails"
+  defp humanize_preference_type("promotional"), do: "Special offers"
+  defp humanize_preference_type("newsletter"), do: "Newsletter"
+  defp humanize_preference_type("product_updates"), do: "Product updates"
+  defp humanize_preference_type("tips"), do: "Tips and tutorials"
+  defp humanize_preference_type("security_alerts"), do: "Security alerts"
+  defp humanize_preference_type("subscription_updates"), do: "Subscription updates"
+  defp humanize_preference_type("contact_reminders"), do: "Contact reminders"
+  defp humanize_preference_type("usage_tips"), do: "Usage tips"
+  defp humanize_preference_type(type), do: Phoenix.Naming.humanize(type)
+end
