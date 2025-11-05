@@ -54,10 +54,10 @@ defmodule <%= @web_module %>.EmailPreferencesComponents do
           disabled={@disabled}
           value="true"
           class={[
-            "h-4 w-4 rounded border-gray-300",
+            "h-4 w-4 rounded border-gray-300 dark:border-gray-600",
             if(@disabled,
-              do: "text-gray-400 cursor-not-allowed",
-              else: "text-zinc-900 focus:ring-zinc-900"
+              do: "text-gray-400 dark:text-gray-500 cursor-not-allowed",
+              else: "text-zinc-900 dark:text-zinc-100 focus:ring-zinc-900 dark:focus:ring-zinc-300"
             )
           ]}
         />
@@ -65,11 +65,11 @@ defmodule <%= @web_module %>.EmailPreferencesComponents do
       <div class="ml-3">
         <label for={"preference_#{@preference_type}"} class={[
           "text-sm font-medium",
-          if(@disabled, do: "text-gray-500", else: "text-zinc-900 cursor-pointer")
+          if(@disabled, do: "text-gray-500 dark:text-gray-400", else: "text-zinc-900 dark:text-zinc-100 cursor-pointer")
         ]}>
           {@label}
         </label>
-        <p :if={@description} class="text-sm text-zinc-600">
+        <p :if={@description} class="text-sm text-zinc-600 dark:text-zinc-400">
           {@description}
         </p>
       </div>

@@ -67,19 +67,19 @@ defmodule <%= @web_module %>.UnsubscribeLive do
   def render(assigns) do
     ~H"""
     <div class="mx-auto max-w-md mt-16">
-      <div class="bg-white shadow sm:rounded-lg">
+      <div class="bg-white dark:bg-gray-800 shadow sm:rounded-lg">
         <div class="px-4 py-5 sm:p-6">
           <%= if @error do %>
             <div class="text-center">
-              <svg class="mx-auto h-12 w-12 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="mx-auto h-12 w-12 text-red-400 dark:text-red-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
 
-              <h3 class="mt-4 text-lg font-medium text-zinc-900">
+              <h3 class="mt-4 text-lg font-medium text-zinc-900 dark:text-zinc-100">
                 <%= if @error == :expired, do: "Link Expired", else: "Invalid Link" %>
               </h3>
 
-              <p class="mt-2 text-sm text-zinc-600">
+              <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
                 <%= if @error == :expired do %>
                   This unsubscribe link has expired. Please use the link from a more recent email, or manage your preferences from your account settings.
                 <% else %>
@@ -90,7 +90,7 @@ defmodule <%= @web_module %>.UnsubscribeLive do
               <div class="mt-6">
                 <.link
                   href={~p"/users/log-in"}
-                  class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900"
+                  class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-zinc-900 dark:bg-zinc-600 hover:bg-zinc-800 dark:hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-zinc-900 dark:focus:ring-zinc-300"
                 >
                   Go to Account Settings
                 </.link>
@@ -99,22 +99,22 @@ defmodule <%= @web_module %>.UnsubscribeLive do
           <% else %>
             <%= if @unsubscribed do %>
               <div class="text-center">
-                <svg class="mx-auto h-12 w-12 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="mx-auto h-12 w-12 text-green-400 dark:text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
 
-                <h3 class="mt-4 text-lg font-medium text-zinc-900">
+                <h3 class="mt-4 text-lg font-medium text-zinc-900 dark:text-zinc-100">
                   You've Been Unsubscribed
                 </h3>
 
-                <p class="mt-2 text-sm text-zinc-600">
+                <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
                   You will no longer receive <%= humanize_preference_type(@preference_type) %> from us.
                 </p>
 
                 <div class="mt-6 space-y-3">
                   <.link
                     href={~p"/settings/email-preferences"}
-                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900"
+                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-zinc-900 dark:bg-zinc-600 hover:bg-zinc-800 dark:hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-zinc-900 dark:focus:ring-zinc-300"
                   >
                     Manage All Preferences
                   </.link>
@@ -122,7 +122,7 @@ defmodule <%= @web_module %>.UnsubscribeLive do
                   <div>
                     <.link
                       href={~p"/"}
-                      class="text-sm text-zinc-600 hover:text-zinc-800"
+                      class="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
                     >
                       Return to homepage
                     </.link>
@@ -131,11 +131,11 @@ defmodule <%= @web_module %>.UnsubscribeLive do
               </div>
             <% else %>
               <div class="text-center">
-                <h3 class="text-lg font-medium text-zinc-900">
+                <h3 class="text-lg font-medium text-zinc-900 dark:text-zinc-100">
                   Unsubscribe from <%= humanize_preference_type(@preference_type) %>
                 </h3>
 
-                <p class="mt-2 text-sm text-zinc-600">
+                <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
                   Are you sure you want to stop receiving <%= humanize_preference_type(@preference_type) %>?
                 </p>
 
@@ -150,13 +150,13 @@ defmodule <%= @web_module %>.UnsubscribeLive do
 
                   <.link
                     href={~p"/settings/email-preferences"}
-                    class="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-zinc-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900"
+                    class="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-zinc-700 dark:text-zinc-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-zinc-900 dark:focus:ring-zinc-300"
                   >
                     Manage All Preferences
                   </.link>
                 </div>
 
-                <p class="mt-4 text-xs text-zinc-500">
+                <p class="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
                   You will continue to receive important account-related emails.
                 </p>
               </div>

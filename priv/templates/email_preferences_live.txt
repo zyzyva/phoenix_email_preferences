@@ -90,12 +90,12 @@ defmodule <%= @web_module %>.EmailPreferencesLive do
       <div class="mt-8 space-y-6">
         <!-- Categorized preferences -->
         <%= for {category, preferences} <- @categorized_preferences do %>
-          <div class="bg-white shadow sm:rounded-lg">
-            <div class="border-b border-gray-200 px-4 py-5 sm:px-6">
-              <h2 class="text-base font-semibold leading-6 text-gray-900">
+          <div class="bg-white dark:bg-gray-800 shadow sm:rounded-lg">
+            <div class="border-b border-gray-200 dark:border-gray-700 px-4 py-5 sm:px-6">
+              <h2 class="text-base font-semibold leading-6 text-gray-900 dark:text-gray-100">
                 <%= category["name"] %>
               </h2>
-              <p class="mt-1 text-sm text-gray-500">
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 <%= category["description"] %>
               </p>
             </div>
@@ -109,18 +109,18 @@ defmodule <%= @web_module %>.EmailPreferencesLive do
                       <div class="flex-1 pr-4">
                         <label
                           for={"toggle-#{pref["key"]}"}
-                          class="text-sm font-medium text-zinc-900"
+                          class="text-sm font-medium text-zinc-900 dark:text-zinc-100"
                         >
                           <%= pref["name"] %>
                         </label>
-                        <p class="mt-1 text-sm text-zinc-600">
+                        <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                           <%= pref["description"] %>
                         </p>
 
                         <!-- Frequency and status information -->
-                        <div class="mt-2 flex flex-wrap gap-2 text-xs text-zinc-500">
+                        <div class="mt-2 flex flex-wrap gap-2 text-xs text-zinc-500 dark:text-zinc-400">
                           <%= if pref["frequency"] do %>
-                            <span class="inline-flex items-center rounded-md bg-gray-50 px-2 py-1">
+                            <span class="inline-flex items-center rounded-md bg-gray-50 dark:bg-gray-700 px-2 py-1">
                               <span class="sr-only">Frequency:</span>
                               <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -139,7 +139,7 @@ defmodule <%= @web_module %>.EmailPreferencesLive do
                           <% end %>
 
                           <%= if !pref.opted_in && pref.opted_out_at do %>
-                            <span class="inline-flex items-center text-gray-500">
+                            <span class="inline-flex items-center text-gray-500 dark:text-gray-400">
                               Unsubscribed <%= format_date(pref.opted_out_at) %>
                             </span>
                           <% end %>
@@ -159,8 +159,8 @@ defmodule <%= @web_module %>.EmailPreferencesLive do
                           aria-describedby={"#{pref["key"]}-description"}
                           class={[
                             "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out",
-                            "focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2",
-                            if(pref.opted_in, do: "bg-zinc-900", else: "bg-gray-200"),
+                            "focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-300 focus:ring-offset-2 dark:focus:ring-offset-gray-800",
+                            if(pref.opted_in, do: "bg-zinc-900 dark:bg-zinc-100", else: "bg-gray-200 dark:bg-gray-600"),
                             if(@saving, do: "opacity-50 cursor-not-allowed")
                           ]}
                         >
@@ -174,15 +174,15 @@ defmodule <%= @web_module %>.EmailPreferencesLive do
                           <span
                             aria-hidden="true"
                             class={[
-                              "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                              if(pref.opted_in, do: "translate-x-5", else: "translate-x-0")
+                              "pointer-events-none inline-block h-5 w-5 transform rounded-full shadow ring-0 transition duration-200 ease-in-out",
+                              if(pref.opted_in, do: "translate-x-5 bg-white dark:bg-gray-800", else: "translate-x-0 bg-white dark:bg-gray-200")
                             ]}
                           />
                         </button>
                       <% else %>
                         <div class="flex items-center">
                           <span
-                            class="inline-flex items-center rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600"
+                            class="inline-flex items-center rounded-md bg-gray-100 dark:bg-gray-700 px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-400"
                             role="status"
                             aria-label={"#{pref["name"]} is required for security"}
                           >
@@ -200,7 +200,7 @@ defmodule <%= @web_module %>.EmailPreferencesLive do
                     </div>
 
                     <%= if pref != List.last(preferences) do %>
-                      <div class="border-t border-gray-200" role="separator"></div>
+                      <div class="border-t border-gray-200 dark:border-gray-700" role="separator"></div>
                     <% end %>
                   <% end %>
                 </div>
@@ -210,7 +210,7 @@ defmodule <%= @web_module %>.EmailPreferencesLive do
         <% end %>
 
         <!-- Unsubscribe all button -->
-        <div class="bg-white shadow sm:rounded-lg">
+        <div class="bg-white dark:bg-gray-800 shadow sm:rounded-lg">
           <div class="px-4 py-5 sm:p-6">
             <button
               type="button"
@@ -218,7 +218,7 @@ defmodule <%= @web_module %>.EmailPreferencesLive do
               data-confirm="Are you sure you want to unsubscribe from all optional marketing emails? Required security notifications will still be sent."
               disabled={@saving}
               class={[
-                "text-sm text-red-600 hover:text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2",
+                "text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 dark:focus:ring-red-400 focus:ring-offset-2 dark:focus:ring-offset-gray-800",
                 if(@saving, do: "opacity-50 cursor-not-allowed")
               ]}
               aria-label="Unsubscribe from all optional marketing emails"
@@ -229,16 +229,16 @@ defmodule <%= @web_module %>.EmailPreferencesLive do
         </div>
 
         <!-- Information notice -->
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4" role="region" aria-label="Important information">
+        <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4" role="region" aria-label="Important information">
           <div class="flex">
             <div class="flex-shrink-0">
-              <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <svg class="h-5 w-5 text-blue-400 dark:text-blue-300" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                 <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
               </svg>
             </div>
             <div class="ml-3">
               <h3 class="sr-only">Information about email preferences</h3>
-              <p class="text-sm text-blue-700">
+              <p class="text-sm text-blue-700 dark:text-blue-300">
                 You will continue to receive important account-related and security emails regardless of these preferences.
                 These essential emails keep your account secure and cannot be disabled.
               </p>
