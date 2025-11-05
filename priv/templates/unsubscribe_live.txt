@@ -2,9 +2,14 @@ defmodule <%= @web_module %>.UnsubscribeLive do
   use <%= @web_module %>, :live_view
 
   alias <%= @app_module %>.EmailPreferences
+  alias <%= @app_module %>.EmailPreferences.Config
 
   @impl true
   def mount(%{"token" => token}, _session, socket) do
+    # Store connect_info during mount for later use
+    ip_address = get_connect_info(socket, :peer_data) |> get_ip_address()
+    user_agent = get_connect_info(socket, :user_agent)
+
     case EmailPreferences.verify_unsubscribe_token(token) do
       {:ok, {user_id, preference_type}} ->
         {:ok,
@@ -13,7 +18,9 @@ defmodule <%= @web_module %>.UnsubscribeLive do
          |> assign(:preference_type, preference_type)
          |> assign(:token, token)
          |> assign(:unsubscribed, false)
-         |> assign(:error, nil)}
+         |> assign(:error, nil)
+         |> assign(:ip_address, ip_address)
+         |> assign(:user_agent, user_agent)}
 
       {:error, :expired} ->
         {:ok,
@@ -22,7 +29,9 @@ defmodule <%= @web_module %>.UnsubscribeLive do
          |> assign(:preference_type, nil)
          |> assign(:token, nil)
          |> assign(:unsubscribed, false)
-         |> assign(:error, :expired)}
+         |> assign(:error, :expired)
+         |> assign(:ip_address, ip_address)
+         |> assign(:user_agent, user_agent)}
 
       {:error, :invalid} ->
         {:ok,
@@ -31,7 +40,9 @@ defmodule <%= @web_module %>.UnsubscribeLive do
          |> assign(:preference_type, nil)
          |> assign(:token, nil)
          |> assign(:unsubscribed, false)
-         |> assign(:error, :invalid)}
+         |> assign(:error, :invalid)
+         |> assign(:ip_address, ip_address)
+         |> assign(:user_agent, user_agent)}
     end
   end
 
@@ -39,8 +50,8 @@ defmodule <%= @web_module %>.UnsubscribeLive do
   def handle_event("unsubscribe", _params, socket) do
     result = EmailPreferences.opt_out(socket.assigns.user_id, socket.assigns.preference_type, %{
       source: "email_link",
-      ip_address: get_connect_info(socket, :peer_data) |> get_ip_address(),
-      user_agent: get_connect_info(socket, :user_agent)
+      ip_address: socket.assigns.ip_address,
+      user_agent: socket.assigns.user_agent
     })
 
     case result do
@@ -78,7 +89,7 @@ defmodule <%= @web_module %>.UnsubscribeLive do
 
               <div class="mt-6">
                 <.link
-                  href={~p"/users/log_in"}
+                  href={~p"/users/log-in"}
                   class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-zinc-900 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900"
                 >
                   Go to Account Settings
@@ -157,12 +168,12 @@ defmodule <%= @web_module %>.UnsubscribeLive do
     """
   end
 
-  defp humanize_preference_type("marketing"), do: "marketing emails"
-  defp humanize_preference_type("newsletter"), do: "our newsletter"
-  defp humanize_preference_type("product_updates"), do: "product updates"
-  defp humanize_preference_type("tips"), do: "tips and tutorials"
-  defp humanize_preference_type(type), do: Phoenix.Naming.humanize(type)
+  defp humanize_preference_type(type) do
+    Config.preference_name(type) || Phoenix.Naming.humanize(type)
+  end
 
   defp get_ip_address(nil), do: nil
   defp get_ip_address({ip, _port}), do: :inet.ntoa(ip) |> to_string()
+  defp get_ip_address(%{address: address}), do: get_ip_address(address)  # Handle test environment
+  defp get_ip_address(ip) when is_tuple(ip), do: :inet.ntoa(ip) |> to_string()  # Handle bare IP tuple
 end

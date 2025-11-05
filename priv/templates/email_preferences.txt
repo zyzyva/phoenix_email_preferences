@@ -8,13 +8,85 @@ defmodule <%= @app_module %>.EmailPreferences do
   alias <%= @app_module %>.EmailPreferences.UserPreference
   alias <%= @app_module %>.EmailPreferences.PreferenceHistory
   alias <%= @app_module %>.EmailPreferences.Telemetry
+  alias <%= @app_module %>.EmailPreferences.Config
 
-  @preference_types ~w(marketing newsletter product_updates tips)
+  @doc """
+  Returns all enabled preference types from the JSON configuration.
+  """
+  def preference_types do
+    Config.preference_types()
+  end
 
-  def preference_types, do: @preference_types
+  @doc """
+  Returns human-readable name for a preference type.
+  """
+  def preference_name(type) do
+    Config.preference_name(type)
+  end
+
+  @doc """
+  Returns description for a preference type.
+  """
+  def preference_description(type) do
+    Config.preference_description(type)
+  end
+
+  @doc """
+  Returns categorized preferences for display.
+  """
+  def categorized_preferences do
+    Config.categorized_preferences()
+  end
+
+  @doc """
+  Checks if a preference can be opted out of.
+  """
+  def can_opt_out?(type) do
+    Config.can_opt_out?(type)
+  end
 
   def get_user_preferences(user_id) do
-    Repo.all(from p in UserPreference, where: p.user_id == ^user_id)
+    preferences = Repo.all(from p in UserPreference, where: p.user_id == ^user_id)
+
+    # If user has no preferences, initialize with defaults
+    if Enum.empty?(preferences) do
+      initialize_default_preferences(user_id)
+      Repo.all(from p in UserPreference, where: p.user_id == ^user_id)
+    else
+      preferences
+    end
+  end
+
+  @doc """
+  Initializes default preferences for a user based on JSON configuration.
+  """
+  def initialize_default_preferences(user_id) do
+    default_prefs = Config.default_preferences()
+
+    Enum.each(preference_types(), fn type ->
+      if type in default_prefs do
+        # Create opted-in preference for defaults
+        %UserPreference{}
+        |> UserPreference.changeset(%{
+          user_id: user_id,
+          preference_type: type,
+          opted_in: true,
+          opted_in_at: DateTime.utc_now()
+        })
+        |> Repo.insert()
+      else
+        # Create opted-out preference for non-defaults (unless they can't opt out)
+        unless not Config.can_opt_out?(type) do
+          %UserPreference{}
+          |> UserPreference.changeset(%{
+            user_id: user_id,
+            preference_type: type,
+            opted_in: false
+          })
+          |> Repo.insert()
+        end
+      end
+    end)
   end
 
   def get_preference(user_id, preference_type) do
@@ -89,7 +161,14 @@ defmodule <%= @app_module %>.EmailPreferences do
 
   def set_preferences(user_id, preferences_map, attrs \\ %{}) do
     Enum.each(preferences_map, fn {preference_type, opted_in} ->
-      if opted_in do
+      # Handle string "true"/"false" from form inputs
+      should_opt_in = case opted_in do
+        true -> true
+        "true" -> true
+        _ -> false
+      end
+
+      if should_opt_in do
         opt_in(user_id, preference_type, attrs)
       else
         opt_out(user_id, preference_type, attrs)
@@ -140,4 +219,48 @@ defmodule <%= @app_module %>.EmailPreferences do
     })
     |> Repo.insert()
   end
+
+  @doc """
+  Sets up default preferences for a new user based on configuration.
+  """
+  def setup_default_preferences(user_id, attrs \\ %{}) do
+    default_opted_in = Config.default_opted_in()
+    all_preferences = Config.preference_types()
+
+    Enum.each(all_preferences, fn pref_type ->
+      is_default = pref_type in default_opted_in
+
+      if is_default do
+        opt_in(user_id, pref_type, attrs)
+      else
+        # Create record but keep opted_out
+        opt_out(user_id, pref_type, attrs)
+      end
+    end)
+  end
+
+  @doc """
+  Checks if a user needs to set up their email preferences.
+  Returns true if they have no actual preference records (opted in or out).
+  This will be true for new users AND users who dismissed without choosing.
+  """
+  def needs_preference_setup?(user_id) do
+    # Check if user has ANY preference records (not history, actual preferences)
+    preferences = get_user_preferences(user_id)
+    Enum.empty?(preferences)
+  end
+
+  @doc """
+  Gets limited preference history for a user.
+  """
+  def get_preference_history(user_id, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 100)
+
+    PreferenceHistory
+    |> where([h], h.user_id == ^user_id)
+    |> order_by([h], desc: h.inserted_at)
+    |> limit(^limit)
+    |> Repo.all()
+  end
+
 end

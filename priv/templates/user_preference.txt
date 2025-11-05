@@ -1,6 +1,7 @@
 defmodule <%= @app_module %>.EmailPreferences.UserPreference do
   use Ecto.Schema
   import Ecto.Changeset
+  alias <%= @app_module %>.EmailPreferences.Config
 
   schema "user_email_preferences" do
     field :preference_type, :string
@@ -17,10 +18,13 @@ defmodule <%= @app_module %>.EmailPreferences.UserPreference do
   end
 
   def changeset(user_preference, attrs) do
+    # Get valid preference types from configuration
+    valid_types = Config.preference_types()
+
     user_preference
     |> cast(attrs, [:user_id, :preference_type, :opted_in, :opted_in_at, :opted_out_at, :ip_address, :user_agent, :source])
     |> validate_required([:user_id, :preference_type, :opted_in])
-    |> validate_inclusion(:preference_type, ~w(marketing newsletter product_updates tips))
+    |> validate_inclusion(:preference_type, valid_types)
     |> unique_constraint([:user_id, :preference_type])
   end
 end

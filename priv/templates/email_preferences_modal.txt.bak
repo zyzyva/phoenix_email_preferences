@@ -1,0 +1,236 @@
+defmodule Contacts4usWeb.EmailPreferencesModal do
+  @moduledoc """
+  Modal component for collecting email preferences on first login.
+  Automatically shows for new users who haven't set their preferences yet.
+  """
+  use Contacts4usWeb, :live_component
+  alias Contacts4us.EmailPreferences
+
+  @impl true
+  def mount(socket) do
+    {:ok, socket}
+  end
+
+  @impl true
+  def update(assigns, socket) do
+    socket =
+      socket
+      |> assign(assigns)
+      |> assign_preferences()
+
+    {:ok, socket}
+  end
+
+  defp assign_preferences(socket) do
+    user = socket.assigns[:current_user] ||
+           (socket.assigns[:current_scope] && socket.assigns.current_scope.user)
+
+    if user && should_show_modal?(user) do
+      preference_types = EmailPreferences.Config.preference_types()
+
+      # Get current preferences
+      preferences = EmailPreferences.get_user_preferences(user.id)
+
+      # Build checked map
+      checked =
+        Enum.reduce(preferences, %{}, fn pref, acc ->
+          Map.put(acc, pref.preference_type, pref.opted_in)
+        end)
+
+      # Add defaults for missing preferences
+      checked =
+        Enum.reduce(preference_types, checked, fn type, acc ->
+          Map.put_new(acc, type, type in EmailPreferences.Config.default_opted_in())
+        end)
+
+      socket
+      |> assign(:show_modal, true)
+      |> assign(:preference_types, preference_types)
+      |> assign(:checked, checked)
+      |> assign(:saving, false)
+    else
+      assign(socket, :show_modal, false)
+    end
+  end
+
+  defp should_show_modal?(user) do
+    # Show modal if user has no preference records
+    EmailPreferences.needs_preference_setup?(user.id)
+  end
+
+  @impl true
+  def render(assigns) do
+    ~H"""
+    <div>
+      <div :if={@show_modal} class="relative z-50" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <!-- Background backdrop -->
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+          <div class="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+            <div class="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl sm:p-6">
+              <div class="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 class="text-lg font-semibold leading-6 text-gray-900 dark:text-white" id="modal-title">
+                  <div class="flex items-center space-x-2">
+                    <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <span>Customize Your Email Preferences</span>
+                  </div>
+                </h3>
+              </div>
+
+        <div class="space-y-4">
+          <p class="text-sm text-gray-600 dark:text-gray-400">
+            Welcome! Let us know which types of emails you'd like to receive. You can change these settings anytime.
+          </p>
+
+          <div class="space-y-3 max-h-96 overflow-y-auto">
+            <%= for {category, prefs} <- categorized_preferences(@preference_types) do %>
+              <div class="border rounded-lg p-4 dark:border-gray-700">
+                <h4 class="font-medium text-sm mb-3 text-gray-900 dark:text-white">
+                  <%= category["name"] %>
+                </h4>
+                <div class="space-y-2">
+                  <%= for type <- prefs do %>
+                    <label class="flex items-start space-x-3 cursor-pointer">
+                      <div class="flex items-center h-5">
+                        <input
+                          type="checkbox"
+                          name={"preferences[#{type}]"}
+                          id={"modal_preference_#{type}"}
+                          checked={Map.get(@checked, type, false)}
+                          disabled={!EmailPreferences.Config.can_opt_out?(type) || @saving}
+                          phx-click="toggle_preference"
+                          phx-value-type={type}
+                          phx-target={@myself}
+                          class={[
+                            "h-4 w-4 rounded",
+                            if(EmailPreferences.Config.can_opt_out?(type),
+                              do: "text-blue-600 focus:ring-blue-500 dark:focus:ring-blue-600",
+                              else: "text-gray-400 cursor-not-allowed"
+                            )
+                          ]}
+                        />
+                      </div>
+                      <div class="flex-1">
+                        <div class="text-sm font-medium text-gray-900 dark:text-white">
+                          <%= EmailPreferences.Config.preference_name(type) %>
+                          <%= if !EmailPreferences.Config.can_opt_out?(type) do %>
+                            <span class="text-xs text-gray-500 ml-1">(Required)</span>
+                          <% end %>
+                        </div>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">
+                          <%= EmailPreferences.Config.preference_description(type) %>
+                        </p>
+                      </div>
+                    </label>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
+          </div>
+
+          <div class="flex justify-between items-center pt-4 border-t dark:border-gray-700">
+            <button
+              type="button"
+              phx-click="dismiss"
+              phx-target={@myself}
+              disabled={@saving}
+              class="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              Skip for now
+            </button>
+
+            <button
+              type="button"
+              phx-click="save_preferences"
+              phx-target={@myself}
+              disabled={@saving}
+              class={[
+                "px-4 py-2 rounded-lg font-medium text-white transition-colors",
+                if(@saving,
+                  do: "bg-gray-400 cursor-not-allowed",
+                  else: "bg-blue-600 hover:bg-blue-700"
+                )
+              ]}
+            >
+              <%= if @saving do %>
+                <span class="flex items-center">
+                  <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Saving...
+                </span>
+              <% else %>
+                Save Preferences
+              <% end %>
+            </button>
+          </div>
+        </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  @impl true
+  def handle_event("toggle_preference", %{"type" => type}, socket) do
+    if EmailPreferences.Config.can_opt_out?(type) do
+      checked = Map.update(socket.assigns.checked, type, false, &(!&1))
+      {:noreply, assign(socket, :checked, checked)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("save_preferences", _params, socket) do
+    user = socket.assigns[:current_user] ||
+           (socket.assigns[:current_scope] && socket.assigns.current_scope.user)
+    socket = assign(socket, :saving, true)
+
+    # Convert checked map to preferences format
+    preferences =
+      Enum.reduce(socket.assigns.checked, %{}, fn {type, checked}, acc ->
+        if checked, do: Map.put(acc, type, "true"), else: acc
+      end)
+
+    # Save preferences
+    EmailPreferences.set_preferences(user.id, preferences, %{source: "first_login_modal"})
+
+    # Send completion event to parent
+    send(self(), {:email_preferences_saved, user.id})
+
+    {:noreply,
+     socket
+     |> assign(:saving, false)
+     |> assign(:show_modal, false)
+     |> put_flash(:info, "Email preferences saved successfully!")}
+  end
+
+  @impl true
+  def handle_event("dismiss", _params, socket) do
+    # Just close the modal - don't record any preferences
+    # This means they'll be prompted again next login
+    {:noreply, assign(socket, :show_modal, false)}
+  end
+
+  # Helper to categorize preferences
+  defp categorized_preferences(preference_types) do
+    EmailPreferences.Config.categorized_preferences()
+    |> Enum.map(fn {category_info, prefs} ->
+      # Filter to only enabled preference types
+      filtered_prefs =
+        prefs
+        |> Enum.map(& &1["key"])
+        |> Enum.filter(&(&1 in preference_types))
+
+      {category_info, filtered_prefs}
+    end)
+    |> Enum.filter(fn {_, prefs} -> length(prefs) > 0 end)
+  end
+end

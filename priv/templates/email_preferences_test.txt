@@ -1,0 +1,118 @@
+defmodule <%= @web_module %>.EmailPreferencesLiveTest do
+  use <%= @web_module %>.ConnCase
+
+  import Phoenix.LiveViewTest
+
+  alias <%= @app_module %>.EmailPreferences
+
+  setup :register_and_log_in_user
+
+  describe "Email Preferences LiveView" do
+    test "renders email preferences page", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/settings/email-preferences")
+
+      assert html =~ "Email Preferences"
+
+      # Check that at least some preference types are shown
+      # The actual preference names depend on the JSON configuration
+      preference_types = EmailPreferences.preference_types()
+      assert length(preference_types) > 0
+
+      # Verify at least one preference name appears
+      first_type = hd(preference_types)
+      preference_name = EmailPreferences.preference_name(first_type)
+      assert html =~ preference_name
+    end
+
+    test "toggles individual preference on", %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/settings/email-preferences")
+
+      # Find a preference that is not a default and can be opted out
+      default_prefs = EmailPreferences.Config.default_preferences()
+      toggle_type = EmailPreferences.preference_types()
+                    |> Enum.find(fn type ->
+                      type not in default_prefs && EmailPreferences.can_opt_out?(type)
+                    end)
+
+      # Skip test if no suitable preference exists
+      if toggle_type do
+        # Toggle it on
+        view
+        |> element("button[phx-value-type=\"#{toggle_type}\"]")
+        |> render_click()
+
+        # Verify preference was saved
+        assert {:ok, true} = EmailPreferences.has_consented?(user.id, toggle_type)
+      end
+    end
+
+    test "toggles individual preference off", %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/settings/email-preferences")
+
+      # Find a preference that is a default and can be opted out
+      default_prefs = EmailPreferences.Config.default_preferences()
+      toggle_type = EmailPreferences.preference_types()
+                    |> Enum.find(fn type ->
+                      type in default_prefs && EmailPreferences.can_opt_out?(type)
+                    end)
+
+      # Skip test if no suitable preference exists
+      if toggle_type do
+        # Toggle it off
+        view
+        |> element("button[phx-value-type=\"#{toggle_type}\"]")
+        |> render_click()
+
+        # Verify preference was saved
+        assert {:ok, false} = EmailPreferences.has_consented?(user.id, toggle_type)
+      end
+    end
+
+    test "unsubscribes from all preferences", %{conn: conn, user: user} do
+      # Defaults will already be initialized
+      # No need to explicitly opt in first
+
+      {:ok, view, _html} = live(conn, ~p"/settings/email-preferences")
+
+      # Click unsubscribe all
+      view
+      |> element("button[phx-click=\"unsubscribe_all\"]")
+      |> render_click()
+
+      # Verify all opt-outable preferences are opted out
+      for type <- EmailPreferences.preference_types() do
+        if EmailPreferences.can_opt_out?(type) do
+          assert {:ok, false} = EmailPreferences.has_consented?(user.id, type)
+        end
+      end
+    end
+
+    test "displays opted-in preferences correctly", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/settings/email-preferences")
+
+      # For any default preferences, verify they show as opted-in
+      default_prefs = EmailPreferences.Config.default_preferences()
+      if length(default_prefs) > 0 do
+        # The toggle should be in the "on" position (translated)
+        assert html =~ "translate-x-5"
+      end
+    end
+
+    test "displays opted-out dates for unsubscribed preferences", %{conn: conn, user: user} do
+      # Find a preference that can be opted out
+      opt_outable = EmailPreferences.preference_types()
+                    |> Enum.find(&EmailPreferences.can_opt_out?/1)
+
+      if opt_outable do
+        # First ensure it's opted in, then opt out
+        {:ok, _} = EmailPreferences.opt_in(user.id, opt_outable, %{source: "test"})
+        {:ok, _} = EmailPreferences.opt_out(user.id, opt_outable, %{source: "test"})
+
+        {:ok, _view, html} = live(conn, ~p"/settings/email-preferences")
+
+        # Should show the unsubscribe date
+        assert html =~ "Unsubscribed"
+      end
+    end
+  end
+end

@@ -1,0 +1,321 @@
+defmodule <%= @web_module %>.EmailPreferencesLive do
+  use <%= @web_module %>, :live_view
+
+  alias <%= @app_module %>.EmailPreferences
+  alias <%= @app_module %>.EmailPreferences.Config
+
+  @impl true
+  def mount(_params, _session, socket) do
+    user_id = get_current_user_id(socket)
+
+    # Store connect_info during mount for later use
+    ip_address = get_connect_info(socket, :peer_data) |> get_ip_address()
+    user_agent = get_connect_info(socket, :user_agent)
+
+    {:ok,
+     socket
+     |> assign(:user_id, user_id)
+     |> assign(:ip_address, ip_address)
+     |> assign(:user_agent, user_agent)
+     |> assign(:saving, false)
+     |> load_preferences()}
+  end
+
+  @impl true
+  def handle_event("toggle_preference", %{"type" => type}, socket) do
+    user_id = socket.assigns.user_id
+    current_preference = find_preference(socket.assigns.categorized_preferences, type)
+
+    # Check if this preference can be opted out
+    if !EmailPreferences.can_opt_out?(type) do
+      {:noreply, put_flash(socket, :error, "This preference cannot be changed for security reasons")}
+    else
+      result = if current_preference && current_preference.opted_in do
+        EmailPreferences.opt_out(user_id, type, %{
+          source: "preferences_page",
+          ip_address: socket.assigns.ip_address,
+          user_agent: socket.assigns.user_agent
+        })
+      else
+        EmailPreferences.opt_in(user_id, type, %{
+          source: "preferences_page",
+          ip_address: socket.assigns.ip_address,
+          user_agent: socket.assigns.user_agent
+        })
+      end
+
+      case result do
+        {:ok, _} ->
+          {:noreply,
+           socket
+           |> load_preferences()
+           |> put_flash(:info, "Preferences updated successfully")}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Failed to update preferences")}
+      end
+    end
+  end
+
+  @impl true
+  def handle_event("unsubscribe_all", _params, socket) do
+    user_id = socket.assigns.user_id
+
+    # Only unsubscribe from preferences that can be opted out
+    EmailPreferences.preference_types()
+    |> Enum.filter(&EmailPreferences.can_opt_out?/1)
+    |> Enum.each(fn type ->
+      EmailPreferences.opt_out(user_id, type, %{
+        source: "preferences_page",
+        ip_address: socket.assigns.ip_address,
+        user_agent: socket.assigns.user_agent
+      })
+    end)
+
+    {:noreply,
+     socket
+     |> load_preferences()
+     |> put_flash(:info, "Unsubscribed from all optional marketing emails")}
+  end
+
+  @impl true
+  def render(assigns) do
+    ~H"""
+    <div class="mx-auto max-w-4xl">
+      <.header>
+        Email Preferences
+        <:subtitle>Manage which emails you receive from us</:subtitle>
+      </.header>
+
+      <div class="mt-8 space-y-6">
+        <!-- Categorized preferences -->
+        <%= for {category, preferences} <- @categorized_preferences do %>
+          <div class="bg-white shadow sm:rounded-lg">
+            <div class="border-b border-gray-200 px-4 py-5 sm:px-6">
+              <h2 class="text-base font-semibold leading-6 text-gray-900">
+                <%= category["name"] %>
+              </h2>
+              <p class="mt-1 text-sm text-gray-500">
+                <%= category["description"] %>
+              </p>
+            </div>
+
+            <div class="px-4 py-5 sm:p-6">
+              <fieldset aria-label={category["aria_label"] || category["name"]}>
+                <legend class="sr-only"><%= category["name"] %> preferences</legend>
+                <div class="space-y-6">
+                  <%= for pref <- preferences do %>
+                    <div class="flex items-start justify-between">
+                      <div class="flex-1 pr-4">
+                        <label
+                          for={"toggle-#{pref["key"]}"}
+                          class="text-sm font-medium text-zinc-900"
+                        >
+                          <%= pref["name"] %>
+                        </label>
+                        <p class="mt-1 text-sm text-zinc-600">
+                          <%= pref["description"] %>
+                        </p>
+
+                        <!-- Frequency and status information -->
+                        <div class="mt-2 flex flex-wrap gap-2 text-xs text-zinc-500">
+                          <%= if pref["frequency"] do %>
+                            <span class="inline-flex items-center rounded-md bg-gray-50 px-2 py-1">
+                              <span class="sr-only">Frequency:</span>
+                              <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <%= format_frequency(pref["frequency"]) %>
+                            </span>
+                          <% end %>
+
+                          <%= if pref.opted_in && pref.opted_in_at do %>
+                            <span class="inline-flex items-center text-green-700">
+                              <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                              </svg>
+                              Subscribed <%= format_date(pref.opted_in_at) %>
+                            </span>
+                          <% end %>
+
+                          <%= if !pref.opted_in && pref.opted_out_at do %>
+                            <span class="inline-flex items-center text-gray-500">
+                              Unsubscribed <%= format_date(pref.opted_out_at) %>
+                            </span>
+                          <% end %>
+                        </div>
+                      </div>
+
+                      <%= if EmailPreferences.can_opt_out?(pref["key"]) do %>
+                        <button
+                          id={"toggle-#{pref["key"]}"}
+                          type="button"
+                          phx-click="toggle_preference"
+                          phx-value-type={pref["key"]}
+                          disabled={@saving}
+                          role="switch"
+                          aria-checked={to_string(pref.opted_in)}
+                          aria-label={"Toggle #{pref["name"]}"}
+                          aria-describedby={"#{pref["key"]}-description"}
+                          class={[
+                            "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out",
+                            "focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2",
+                            if(pref.opted_in, do: "bg-zinc-900", else: "bg-gray-200"),
+                            if(@saving, do: "opacity-50 cursor-not-allowed")
+                          ]}
+                        >
+                          <span class="sr-only">
+                            <%= if pref.opted_in do %>
+                              Disable <%= pref["name"] %>
+                            <% else %>
+                              Enable <%= pref["name"] %>
+                            <% end %>
+                          </span>
+                          <span
+                            aria-hidden="true"
+                            class={[
+                              "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                              if(pref.opted_in, do: "translate-x-5", else: "translate-x-0")
+                            ]}
+                          />
+                        </button>
+                      <% else %>
+                        <div class="flex items-center">
+                          <span
+                            class="inline-flex items-center rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600"
+                            role="status"
+                            aria-label={"#{pref["name"]} is required for security"}
+                          >
+                            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
+                            </svg>
+                            Required
+                          </span>
+                        </div>
+                      <% end %>
+
+                      <span id={"#{pref["key"]}-description"} class="sr-only">
+                        <%= Config.aria_description(pref["key"]) %>
+                      </span>
+                    </div>
+
+                    <%= if pref != List.last(preferences) do %>
+                      <div class="border-t border-gray-200" role="separator"></div>
+                    <% end %>
+                  <% end %>
+                </div>
+              </fieldset>
+            </div>
+          </div>
+        <% end %>
+
+        <!-- Unsubscribe all button -->
+        <div class="bg-white shadow sm:rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <button
+              type="button"
+              phx-click="unsubscribe_all"
+              data-confirm="Are you sure you want to unsubscribe from all optional marketing emails? Required security notifications will still be sent."
+              disabled={@saving}
+              class={[
+                "text-sm text-red-600 hover:text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2",
+                if(@saving, do: "opacity-50 cursor-not-allowed")
+              ]}
+              aria-label="Unsubscribe from all optional marketing emails"
+            >
+              Unsubscribe from all optional marketing emails
+            </button>
+          </div>
+        </div>
+
+        <!-- Information notice -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4" role="region" aria-label="Important information">
+          <div class="flex">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <div class="ml-3">
+              <h3 class="sr-only">Information about email preferences</h3>
+              <p class="text-sm text-blue-700">
+                You will continue to receive important account-related and security emails regardless of these preferences.
+                These essential emails keep your account secure and cannot be disabled.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  # Supports both current_user (standard phx.gen.auth) and current_scope.user patterns
+  defp get_current_user_id(socket) do
+    cond do
+      Map.has_key?(socket.assigns, :current_user) ->
+        socket.assigns.current_user.id
+      Map.has_key?(socket.assigns, :current_scope) ->
+        socket.assigns.current_scope.user.id
+      true ->
+        raise "No current_user or current_scope.user found in socket assigns"
+    end
+  end
+
+  defp load_preferences(socket) do
+    user_id = socket.assigns.user_id
+    existing = EmailPreferences.get_user_preferences(user_id)
+
+    # Get categorized preferences from config
+    categorized = Config.categorized_preferences()
+
+    # Map existing preferences to the categorized structure
+    categorized_with_data = Enum.map(categorized, fn {category, prefs} ->
+      prefs_with_data = Enum.map(prefs, fn pref ->
+        existing_pref = Enum.find(existing, &(&1.preference_type == pref["key"]))
+
+        if existing_pref do
+          Map.merge(pref, %{
+            opted_in: existing_pref.opted_in,
+            opted_in_at: existing_pref.opted_in_at,
+            opted_out_at: existing_pref.opted_out_at
+          })
+        else
+          Map.merge(pref, %{
+            opted_in: false,
+            opted_in_at: nil,
+            opted_out_at: nil
+          })
+        end
+      end)
+
+      {category, prefs_with_data}
+    end)
+
+    assign(socket, :categorized_preferences, categorized_with_data)
+  end
+
+  defp find_preference(categorized_preferences, type) do
+    Enum.find_value(categorized_preferences, fn {_category, prefs} ->
+      Enum.find(prefs, &(&1["key"] == type))
+    end)
+  end
+
+  defp format_date(nil), do: ""
+  defp format_date(datetime) do
+    Calendar.strftime(datetime, "%B %d, %Y")
+  end
+
+  defp format_frequency("immediate"), do: "Immediate"
+  defp format_frequency("daily"), do: "Daily"
+  defp format_frequency("weekly"), do: "Weekly"
+  defp format_frequency("bi-weekly"), do: "Every 2 weeks"
+  defp format_frequency("monthly"), do: "Monthly"
+  defp format_frequency("variable"), do: "Varies"
+  defp format_frequency(freq), do: Phoenix.Naming.humanize(freq)
+
+  defp get_ip_address(nil), do: nil
+  defp get_ip_address({ip, _port}), do: :inet.ntoa(ip) |> to_string()
+  defp get_ip_address(%{address: address}), do: get_ip_address(address)  # Handle test environment
+  defp get_ip_address(ip) when is_tuple(ip), do: :inet.ntoa(ip) |> to_string()  # Handle bare IP tuple
+end

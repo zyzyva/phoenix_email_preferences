@@ -1,0 +1,25 @@
+defmodule <%= @web_module %>.EmailPreferencesHook do
+  @moduledoc """
+  LiveView hook for showing email preferences modal on first login.
+  Add this to your authenticated live_session on_mount hooks.
+  """
+  import Phoenix.Component
+
+  def on_mount(:show_email_preferences_modal, _params, _session, socket) do
+    user = socket.assigns[:current_user] ||
+           (socket.assigns[:current_scope] && socket.assigns.current_scope.user)
+
+    if user && should_show_preferences_modal?(user) do
+      # Mark that we should show the modal
+      {:cont, assign(socket, :show_email_preferences_modal, true)}
+    else
+      {:cont, assign(socket, :show_email_preferences_modal, false)}
+    end
+  end
+
+  defp should_show_preferences_modal?(user) do
+    # Show modal if user has no preference records
+    # This covers both new users and users who dismissed without choosing
+    <%= @app_module %>.EmailPreferences.needs_preference_setup?(user.id)
+  end
+end
