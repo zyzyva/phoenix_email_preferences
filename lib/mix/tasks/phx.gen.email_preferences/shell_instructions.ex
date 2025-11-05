@@ -20,30 +20,9 @@ defmodule Mix.Tasks.Phx.Gen.EmailPreferences.ShellInstructions do
     2. Customize email preferences in priv/email_preferences.json
        - Edit preference types, categories, and descriptions
        - Set which preferences are required (can_opt_out: false)
-       - Configure default opt-in preferences
+       - Configure default opt-in preferences (default_opted_in: true)
 
-    3. Add the first-login modal hook to your authenticated live_session:
-
-        live_session :require_authenticated_user,
-          on_mount: [
-            {#{binding[:web_module]}.UserAuth, :ensure_authenticated},
-            {#{binding[:web_module]}.EmailPreferencesHook, :show_email_preferences_modal}
-          ] do
-          # ... your authenticated routes ...
-        end
-
-    4. Add the modal component to your root layout or app layout:
-
-        In lib/#{binding[:context_app]}_web/components/layouts/app.html.heex, add:
-
-        <.live_component
-          :if={assigns[:show_email_preferences_modal]}
-          module={#{binding[:web_module]}.EmailPreferencesModal}
-          id="email-preferences-modal"
-          current_user={@current_user}
-        />
-
-    5. Add routes to your router.ex:
+    3. Add routes to your router.ex:
 
         # Add to your existing authenticated live_session (with phx.gen.auth on_mount)
         scope "/", #{binding[:web_module]} do
@@ -69,6 +48,16 @@ defmodule Mix.Tasks.Phx.Gen.EmailPreferences.ShellInstructions do
         Note: The EmailPreferencesLive module works with both authentication patterns:
         - socket.assigns.current_user (standard phx.gen.auth)
         - socket.assigns.current_scope.user (custom auth patterns)
+
+    4. How it works:
+       - Users automatically get default preferences (from priv/email_preferences.json)
+       - They can manage preferences anytime at /settings/email-preferences
+       - Every email should include an unsubscribe link to /unsubscribe/:token
+       - CAN-SPAM compliant for US users (opt-out model)
+
+    5. (Optional) First-login modal:
+       If you want users to review preferences on first login, see the README
+       for instructions on adding the EmailPreferencesHook and modal component.
 
     6. Run the generated tests to verify everything is working:
 
