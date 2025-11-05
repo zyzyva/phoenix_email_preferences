@@ -31,48 +31,83 @@ defmodule Mix.Tasks.Phx.Gen.EmailPreferences.Remove do
   """
   use Mix.Task
 
+  alias Mix.Tasks.Phx.Gen.EmailPreferences.Remove.{FileRemover, MigrationRollback}
+
   @requirements ["app.config"]
 
   def run(args) do
-    if Mix.Project.umbrella?() do
-      Mix.raise("mix phx.gen.email_preferences.remove must be invoked from within your *_web application root directory")
+    validate_project_structure!()
+
+    opts = parse_options(args)
+    binding = build_binding()
+
+    files_to_remove = FileRemover.get_files_to_remove(binding)
+    migration_files = FileRemover.get_migration_files()
+
+    display_removal_summary(files_to_remove, migration_files, opts.no_rollback)
+
+    unless opts.force do
+      confirm_removal!()
     end
 
-    {opts, _parsed, _invalid} = OptionParser.parse(args,
-      strict: [no_rollback: :boolean, force: :boolean]
-    )
+    unless opts.no_rollback do
+      rollback_migrations_if_needed(migration_files)
+    end
 
-    no_rollback = Keyword.get(opts, :no_rollback, false)
-    force = Keyword.get(opts, :force, false)
+    remove_all_files(files_to_remove, migration_files)
+    FileRemover.cleanup_empty_directories(binding)
+    display_manual_cleanup_instructions()
+  end
 
-    # Get the app configuration
+  defp validate_project_structure! do
+    if Mix.Project.umbrella?() do
+      Mix.raise("""
+      mix phx.gen.email_preferences.remove must be invoked from within your
+      *_web application root directory
+      """)
+    end
+  end
+
+  defp parse_options(args) do
+    {opts, _parsed, _invalid} =
+      OptionParser.parse(args,
+        strict: [no_rollback: :boolean, force: :boolean]
+      )
+
+    %{
+      no_rollback: Keyword.get(opts, :no_rollback, false),
+      force: Keyword.get(opts, :force, false)
+    }
+  end
+
+  defp build_binding do
     context_app = Mix.Phoenix.context_app()
     base_module = Macro.camelize(Atom.to_string(context_app))
 
-    binding = [
+    [
       context_app: context_app,
       app_module: base_module,
       web_module: "#{base_module}Web"
     ]
+  end
 
-    # List of files to remove
-    files_to_remove = get_files_to_remove(binding)
-    migration_files = get_migration_files()
-
-    # Show what will be removed
+  defp display_removal_summary(files_to_remove, migration_files, no_rollback) do
     Mix.shell().info("")
     Mix.shell().info("This will remove the following files:")
     Mix.shell().info("")
 
     if length(migration_files) > 0 && !no_rollback do
       Mix.shell().info("Migrations to roll back:")
+
       for file <- migration_files do
         Mix.shell().info("  #{file}")
       end
+
       Mix.shell().info("")
     end
 
     Mix.shell().info("Files to remove:")
+
     for file <- files_to_remove do
       if File.exists?(file) do
         Mix.shell().info("  #{file}")
@@ -80,61 +115,43 @@ defmodule Mix.Tasks.Phx.Gen.EmailPreferences.Remove do
     end
 
     Mix.shell().info("")
+  end
 
-    # Confirm unless --force is used
-    unless force do
-      unless Mix.shell().yes?("Do you want to proceed?") do
-        Mix.shell().info("Aborted.")
-        exit(:normal)
-      end
+  defp confirm_removal! do
+    unless Mix.shell().yes?("Do you want to proceed?") do
+      Mix.shell().info("Aborted.")
+      exit(:normal)
     end
+  end
 
-    # Roll back migrations if needed
-    if length(migration_files) > 0 && !no_rollback do
+  defp rollback_migrations_if_needed(migration_files) do
+    if length(migration_files) > 0 do
       Mix.shell().info("")
       Mix.shell().info("Rolling back migrations...")
 
-      # Check if migrations have been run
-      if migrations_applied?(migration_files) do
-        rollback_migrations()
+      if MigrationRollback.migrations_applied?(migration_files) do
+        MigrationRollback.rollback(migration_files)
+        Mix.shell().info("Migrations rolled back successfully.")
       else
         Mix.shell().info("Migrations have not been applied, skipping rollback.")
       end
     end
+  end
 
-    # Remove files
+  defp remove_all_files(files_to_remove, migration_files) do
     Mix.shell().info("")
     Mix.shell().info("Removing files...")
 
     all_files = files_to_remove ++ migration_files
-
-    removed_count = Enum.reduce(all_files, 0, fn file, acc ->
-      if File.exists?(file) do
-        File.rm!(file)
-        Mix.shell().info("  Removed #{file}")
-        acc + 1
-      else
-        acc
-      end
-    end)
+    {removed_count, _} = FileRemover.remove_files(all_files)
 
     Mix.shell().info("")
     Mix.shell().info("Removed #{removed_count} files.")
+  end
 
-    # Remove the email_preferences directory if it's empty
-    email_prefs_dir = "lib/#{binding[:app_module] |> String.split(".") |> Enum.map(&Macro.underscore/1) |> Path.join()}/email_preferences"
-    if File.exists?(email_prefs_dir) do
-      case File.ls(email_prefs_dir) do
-        {:ok, []} ->
-          File.rmdir!(email_prefs_dir)
-          Mix.shell().info("  Removed empty directory #{email_prefs_dir}")
-        _ ->
-          :ok
-      end
-    end
-
-    # Show manual cleanup instructions
+  defp display_manual_cleanup_instructions do
     Mix.shell().info("")
+
     Mix.shell().info("""
     ========================================
     Manual Cleanup Required
@@ -159,100 +176,5 @@ defmodule Mix.Tasks.Phx.Gen.EmailPreferences.Remove do
 
     Email preferences have been removed!
     """)
-  end
-
-  defp get_files_to_remove(binding) do
-    # Convert module names to file paths
-    web_path = binding[:web_module]
-      |> String.split(".")
-      |> Enum.map(&Macro.underscore/1)
-      |> Path.join()
-
-    context_path = binding[:app_module]
-      |> String.split(".")
-      |> Enum.map(&Macro.underscore/1)
-      |> Path.join()
-
-    [
-      # Context files
-      "lib/#{context_path}/email_preferences.ex",
-      "lib/#{context_path}/email_preferences/user_preference.ex",
-      "lib/#{context_path}/email_preferences/preference_history.ex",
-      "lib/#{context_path}/email_preferences/telemetry.ex",
-      "lib/#{context_path}/email_preferences/config.ex",
-
-      # Web files
-      "lib/#{web_path}/live/email_preferences_live.ex",
-      "lib/#{web_path}/live/unsubscribe_live.ex",
-      "lib/#{web_path}/live/email_preferences_modal.ex",
-      "lib/#{web_path}/hooks/email_preferences_hook.ex",
-      "lib/#{web_path}/components/email_preferences_components.ex",
-
-      # Configuration file
-      "priv/email_preferences.json",
-
-      # Test files
-      "test/#{context_path}/email_preferences_test.exs",
-      "test/#{web_path}/live/email_preferences_live_test.exs",
-      "test/#{web_path}/live/unsubscribe_live_test.exs"
-    ]
-  end
-
-  defp get_migration_files() do
-    migrations_path = "priv/repo/migrations"
-
-    if File.exists?(migrations_path) do
-      migrations_path
-      |> File.ls!()
-      |> Enum.filter(fn file ->
-        String.contains?(file, "create_user_email_preferences") ||
-        String.contains?(file, "create_email_preference_history")
-      end)
-      |> Enum.map(fn file -> Path.join(migrations_path, file) end)
-      |> Enum.sort(:desc)  # Sort descending to rollback in correct order
-    else
-      []
-    end
-  end
-
-  defp migrations_applied?(migration_files) do
-    # Start the repo if not started
-    app = Mix.Phoenix.context_app()
-    base_module = Macro.camelize(Atom.to_string(app))
-    repo = Module.concat([base_module, "Repo"])
-
-    # Ensure the app is started
-    {:ok, _} = Application.ensure_all_started(app)
-
-    # Check if the schema_migrations table exists and has our migrations
-    try do
-      # Get the migration versions from filenames
-      versions = migration_files
-        |> Enum.map(fn file ->
-          file
-          |> Path.basename()
-          |> String.split("_")
-          |> List.first()
-          |> String.to_integer()
-        end)
-
-      # Query the schema_migrations table
-      import Ecto.Query
-
-      query = from m in "schema_migrations",
-              where: m.version in ^versions,
-              select: m.version
-
-      applied = repo.all(query)
-      length(applied) > 0
-    rescue
-      _ -> false
-    end
-  end
-
-  defp rollback_migrations() do
-    # Run rollback for each migration
-    Mix.Task.run("ecto.rollback", ["-n", "2"])
-    Mix.shell().info("Migrations rolled back successfully.")
   end
 end
